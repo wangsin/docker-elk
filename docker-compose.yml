@@ -1,6 +1,93 @@
 version: '3.2'
 
 services:
+  proxy_nginx:
+    image: nginx:latest
+    restart: always
+    networks:
+      - cicd
+    volumes:
+      - /Users/wangsin/instance-docker/docker-data/nginx/conf.d:/etc/nginx/conf.d
+      - /Users/wangsin/instance-docker/docker-data/nginx/logs:/var/log/nginx
+    ports:
+      - "80:80"           # HTTP
+      - "443:443"         # HTTPS
+      - "10022:10022"     # SSH
+      - "15000:15000/tcp" # logstash
+      - "15000:15000/udp" # logstash
+      - "15044:15044"     # logstash
+      - "19600:19600"     # logstash
+      - "19200:19200"     # es
+      - "19300:19300"     # es
+      - "15601:15601"     # kibana
+
+  gitea_server:
+    image: gitea/gitea:latest
+    environment:
+      - USER_UID=1000
+      - USER_GID=1000
+      - DB_TYPE=postgres
+      - DB_HOST=postgres_db:3308
+      - DB_NAME=karma
+      - DB_USER=karma
+      - DB_PASSWD=postgres_default_password
+    restart: always
+    networks:
+      - cicd
+    volumes:
+      - /Users/wangsin/instance-docker/docker-data/gitea/data:/data
+    # ports:
+    #   - "3000:3000"
+    #   - "22:22"
+    depends_on:
+      - postgres_db
+
+  postgres_db:
+    image: postgres
+    restart: always
+    networks:
+      - cicd
+    environment:
+      - POSTGRES_PASSWORD=postgres_default_password
+      - POSTGRES_USER=karma
+      - PGDATA=/var/lib/postgresql/data/pgdata
+      - POSTGRES_DB=karma
+    volumes:
+      - type: volume
+        source: postgres_data
+        target: /var/lib/postgresql/data/pgdata
+    # ports:
+    #   - 5432:5432
+
+  redis:
+    image: redis
+    restart: always
+    networks:
+      - cicd
+    # ports:
+    #   - 6379:6379
+
+  db_adminer:
+    image: adminer
+    restart: always
+    networks:
+      - cicd
+    # ports:
+    #   - 8996:8080
+
+  jenkins-server:
+    image: wangsin365/jenkins:latest-23192
+    restart: always
+    networks:
+      - cicd
+    volumes:
+      - type: volume
+        source: jenkins_home
+        target: /var/jenkins_home
+    # ports:
+    #   - "8080:8080"
+    #   - "50000:50000"
+
   elasticsearch:
     build:
       context: elasticsearch/
@@ -14,17 +101,17 @@ services:
       - type: volume
         source: elasticsearch
         target: /usr/share/elasticsearch/data
-    ports:
-      - "9200:9200"
-      - "9300:9300"
+    #ports:
+      #- "9200:9200"
+      #- "9300:9300"
     environment:
       ES_JAVA_OPTS: "-Xmx256m -Xms256m"
-      ELASTIC_PASSWORD: changeme
+      #ELASTIC_PASSWORD: default_es_password
       # Use single node discovery in order to disable production mode and avoid bootstrap checks.
       # see: https://www.elastic.co/guide/en/elasticsearch/reference/current/bootstrap-checks.html
       discovery.type: single-node
     networks:
-      - elk
+      - cicd
 
   logstash:
     build:
@@ -40,15 +127,15 @@ services:
         source: ./logstash/pipeline
         target: /usr/share/logstash/pipeline
         read_only: true
-    ports:
-      - "5044:5044"
-      - "5000:5000/tcp"
-      - "5000:5000/udp"
-      - "9600:9600"
+    #ports:
+      #- "5044:5044"
+      #- "5000:5000/tcp"
+      #- "5000:5000/udp"
+      #- "9600:9600"
     environment:
       LS_JAVA_OPTS: "-Xmx256m -Xms256m"
     networks:
-      - elk
+      - cicd
     depends_on:
       - elasticsearch
 
@@ -62,16 +149,20 @@ services:
         source: ./kibana/config/kibana.yml
         target: /usr/share/kibana/config/kibana.yml
         read_only: true
-    ports:
-      - "5601:5601"
+    #ports:
+      #- "5601:5601"
     networks:
-      - elk
+      - cicd
     depends_on:
       - elasticsearch
 
 networks:
-  elk:
+  cicd:
     driver: bridge
 
 volumes:
   elasticsearch:
+
+  jenkins_home:
+
+  postgres_data:
